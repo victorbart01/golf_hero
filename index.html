@@ -161,7 +161,7 @@
         const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
         const hole = new THREE.Mesh(holeGeometry, holeMaterial);
         hole.rotation.x = -Math.PI / 2;
-        hole.position.set(8, 0.01, 3);
+        hole.position.set(-7, 0.01, -7); // Trou dans le coin supérieur gauche
         scene.add(hole);
 
         // Drapeau
@@ -170,7 +170,7 @@
             flagPoleGeometry,
             new THREE.MeshStandardMaterial({ color: 0x888888 })
         );
-        flagPole.position.set(8, 0.5, 3);
+        flagPole.position.set(-7, 0.5, -7); // Correspond à la position du trou
         flagPole.castShadow = true;
         scene.add(flagPole);
 
@@ -179,13 +179,13 @@
             flagGeometry,
             new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide })
         );
-        flag.position.set(8.2, 0.9, 3);
+        flag.position.set(-7.2, 0.9, -7); // Ajusté par rapport au poteau
         scene.add(flag);
 
         const holeBody = new CANNON.Body({
             mass: 0,
             shape: new CANNON.Cylinder(0.3, 0.3, 0.1, 32),
-            position: new CANNON.Vec3(8, -0.05, 3)
+            position: new CANNON.Vec3(-7, -0.05, -7) // Correspond à la position visuelle
         });
         world.addBody(holeBody);
 
@@ -690,6 +690,9 @@
                 // Mise à jour de la physique
                 world.step(1/60);
 
+                // Mise à jour des éléments dynamiques
+                updateDynamicElements();
+
                 // Synchronisation des positions
                 ball.position.copy(ballBody.position);
                 ball.quaternion.copy(ballBody.quaternion);
@@ -753,7 +756,7 @@
         }
 
         function resetBallPosition() {
-            ballBody.position.set(0, 0.2, 0);
+            ballBody.position.set(7, 0.2, 7);
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
             canHit = true;
@@ -784,6 +787,84 @@
         document.addEventListener('contextmenu', (event) => {
             event.preventDefault();
         });
+
+        // Variables pour le moulin à vent et la détection d'eau
+        let windmillAngle = 0;
+        let isInWater = false;
+        let lastValidPosition = new CANNON.Vec3();
+        let waterCheckInterval;
+
+        // Ajout d'une vérification d'eau dans animate()
+        waterBody.addEventListener('collide', (e) => {
+            if (e.body === ballBody && !isInWater) {
+                isInWater = true;
+                playSound('splash');
+                console.log("Balle dans l'eau!");
+                
+                clearTimeout(waterCheckInterval);
+                waterCheckInterval = setTimeout(() => {
+                    resetBallToLastPosition();
+                }, 500);
+            }
+        });
+
+        function resetBallToLastPosition() {
+            if (isInWater) {
+                ballBody.position.copy(lastValidPosition);
+                ballBody.velocity.set(0, 0, 0);
+                ballBody.angularVelocity.set(0, 0, 0);
+                canHit = true;
+                isInWater = false;
+                strokeCount++;
+                scoreDisplay.textContent = `Coups: ${strokeCount} (balle dans l'eau)`;
+            }
+        }
+
+        // Animation pour le moulin à vent et autres éléments dynamiques à ajouter à animate()
+        function updateDynamicElements() {
+            // Rotation du moulin à vent
+            windmillAngle += 0.01;
+            windmillBlade.rotation.y = windmillAngle;
+            
+            // Collision avec le moulin à vent en rotation
+            const bladeDirection = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), windmillAngle);
+            const bladeEnd = new THREE.Vector3(-2, 1.05, 2).add(bladeDirection);
+            
+            const distanceToBlade = ball.position.distanceTo(windmillBlade.position);
+            if (distanceToBlade < 1.2 && ball.position.y < 1.2 && ball.position.y > 0.9) {
+                const forceDirection = bladeDirection.clone().multiplyScalar(0.5);
+                ballBody.applyForce(new CANNON.Vec3(forceDirection.x, 0, forceDirection.z), ballBody.position);
+            }
+            
+            // Sauvegarde de la dernière position valide (pas dans l'eau)
+            if (!isInWater && ballBody.position.y > 0 && 
+                Math.abs(ballBody.position.x) < 9 && Math.abs(ballBody.position.z) < 9) {
+                // Vérifier si la balle n'est pas trop proche de l'eau
+                const distanceToWater = Math.sqrt(
+                    ballBody.position.x * ballBody.position.x + 
+                    ballBody.position.z * ballBody.position.z
+                );
+                if (distanceToWater > 3.7) { // Un peu plus que le rayon de l'eau
+                    lastValidPosition.copy(ballBody.position);
+                }
+            }
+        }
+
+        // Ajouter le son de splash
+        function createSplashSound() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 150;
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.5, audioContext.currentTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            sounds['splash'] = { oscillator, gainNode, duration: 0.5 };
+        }
     </script>
 </body>
 </html>
