@@ -14,39 +14,45 @@ function initPhysics() {
         return;
     }
 
-    // Création du monde physique
     try {
-        // Essayer la nouvelle syntaxe (cannon-es)
+        // Création du monde physique
         world = new CANNON.World({
             gravity: new CANNON.Vec3(0, -9.82, 0) // Gravité terrestre
         });
-    } catch (e) {
-        // Essayer l'ancienne syntaxe (cannon.js)
-        world = new CANNON.World();
-        world.gravity.set(0, -9.82, 0);
-    }
-    
-    // Réduction de la dormance (pour que les petits objets ne s'endorment pas trop vite)
-    if (world.allowSleep !== undefined) {
-        world.allowSleep = true;
-        world.sleepTimeLimit = 1.0;
-        world.sleepSpeedLimit = 0.1;
-    }
-    
-    // Ajout du sol
-    const groundShape = new CANNON.Plane();
-    groundBody = new CANNON.Body({
-        type: CANNON.Body.STATIC || 0, // Utiliser 0 si STATIC n'est pas défini
-        shape: groundShape,
-        material: new CANNON.Material('ground')
-    });
-    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); // Rotation pour que le sol soit horizontal
-    world.addBody(groundBody);
-    
-    // Afficher un message de debug
-    const debug = document.getElementById('debug');
-    if (debug) {
-        debug.innerHTML += "<br><br>Monde physique initialisé ✓";
+        
+        // Réduction de la dormance (pour que les petits objets ne s'endorment pas trop vite)
+        if (world.allowSleep !== undefined) {
+            world.allowSleep = true;
+            world.sleepTimeLimit = 1.0;
+            world.sleepSpeedLimit = 0.1;
+        }
+        
+        // Ajout du sol
+        const groundShape = new CANNON.Plane();
+        groundBody = new CANNON.Body({
+            type: CANNON.Body.STATIC || 0, // Utiliser 0 si STATIC n'est pas défini
+            shape: groundShape,
+            material: new CANNON.Material('ground')
+        });
+        
+        // Corriger la rotation du sol pour s'adapter à la version de Three.js
+        // Au lieu d'utiliser setFromEuler avec des angles directement, créer un Euler
+        const euler = new THREE.Euler(-Math.PI / 2, 0, 0);
+        groundBody.quaternion.setFromEuler(euler.x, euler.y, euler.z, 'XYZ');
+        
+        world.addBody(groundBody);
+        
+        // Afficher un message de debug
+        const debug = document.getElementById('debug');
+        if (debug) {
+            debug.innerHTML += "<br><br>Monde physique initialisé ✓";
+        }
+    } catch (error) {
+        console.error("Erreur lors de l'initialisation de la physique:", error);
+        const debug = document.getElementById('debug');
+        if (debug) {
+            debug.innerHTML += "<br><br>Erreur d'initialisation physique: " + error.message;
+        }
     }
 }
 
@@ -190,7 +196,10 @@ function addObstacle(position, size, type = 'box') {
                 shape: shape,
                 position: new CANNON.Vec3(position.x, position.y, position.z)
             });
-            body.quaternion.setFromEuler(-Math.PI / 12, 0, 0);
+            
+            // Corriger la rotation de la pente
+            const euler = new THREE.Euler(-Math.PI / 12, 0, 0);
+            body.quaternion.setFromEuler(euler.x, euler.y, euler.z, 'XYZ');
             break;
             
         case 'water':
