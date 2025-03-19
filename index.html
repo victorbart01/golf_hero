@@ -93,6 +93,10 @@
         // Initialisation de la physique
         const world = new CANNON.World();
         world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.SAPBroadphase(world);
+        world.solver.iterations = 10; // Plus d'itérations pour une meilleure précision
+        world.defaultContactMaterial.contactEquationStiffness = 1e7;
+        world.defaultContactMaterial.contactEquationRelaxation = 3;
 
         // Sol
         const groundGeometry = new THREE.PlaneGeometry(20, 20);
@@ -112,8 +116,8 @@
 
         // Corps physique du sol avec friction
         const groundPhysicsMaterial = new CANNON.Material({
-            friction: 0.8,
-            restitution: 0.2
+            friction: 0.5, // Friction modérée pour le gazon
+            restitution: 0.1 // Rebond très faible
         });
         
         const groundBody = new CANNON.Body({
@@ -137,13 +141,16 @@
         scene.add(ball);
 
         const ballBody = new CANNON.Body({
-            mass: 1,
+            mass: 0.045, // Masse d'une balle de golf réelle en kg
             shape: new CANNON.Sphere(0.2),
-            linearDamping: 0.5,
-            angularDamping: 0.5,
+            linearDamping: 0.3, // Diminution de l'amortissement pour plus de glissement naturel
+            angularDamping: 0.3, // Diminution de l'amortissement angulaire
+            allowSleep: true, // Permet à la balle de s'endormir pour économiser des ressources
+            sleepSpeedLimit: 0.1, // Limite de vitesse pour s'endormir
+            sleepTimeLimit: 1, // Temps avant de s'endormir
             material: new CANNON.Material({
-                friction: 0.5,
-                restitution: 0.6
+                friction: 0.2, // Friction plus légère pour permettre à la balle de rouler
+                restitution: 0.5 // Rebond modéré
             })
         });
         ballBody.position.set(0, 0.2, 0);
@@ -195,7 +202,8 @@
 
             const wallBody = new CANNON.Body({
                 mass: 0,
-                shape: new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2))
+                shape: new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2)),
+                material: wallMaterial // Utilisation du matériau mur
             });
             wallBody.position.set(x, y, z);
             world.addBody(wallBody);
@@ -224,21 +232,30 @@
         scene.add(sand);
 
         // Corps pour la zone de sable (ralentissement)
+        const sandMaterialPhysics = new CANNON.Material({
+            friction: 1.5, // Beaucoup plus de friction pour le sable
+            restitution: 0.1 // Presque pas de rebond
+        });
+        
         const sandBody = new CANNON.Body({
             mass: 0,
             shape: new CANNON.Cylinder(1.5, 1.5, 0.1, 32),
             position: new CANNON.Vec3(3, 0, 4),
-            material: new CANNON.Material({ friction: 0.8 })
+            material: sandMaterialPhysics
         });
         world.addBody(sandBody);
 
         // Contact de matériaux pour la zone de sable
         const sandBallContactMaterial = new CANNON.ContactMaterial(
             ballBody.material,
-            sandBody.material,
+            sandMaterialPhysics,
             {
-                friction: 0.9,
-                restitution: 0.2
+                friction: 1.8, // Friction très élevée (sable)
+                restitution: 0.05, // Presque pas de rebond
+                contactEquationStiffness: 1e6, // Moins rigide (s'enfonce un peu)
+                contactEquationRelaxation: 6,  // Plus de relaxation
+                frictionEquationStiffness: 1e6,
+                frictionEquationRelaxation: 6
             }
         );
         world.addContactMaterial(sandBallContactMaterial);
@@ -248,11 +265,34 @@
             groundPhysicsMaterial,
             ballBody.material,
             {
-                friction: 0.7,
-                restitution: 0.3
+                friction: 0.1, // Friction plus faible pour un roulement plus long
+                restitution: 0.2, // Rebond faible
+                contactEquationStiffness: 1e8, // Raideur pour une meilleure réaction
+                contactEquationRelaxation: 3,
+                frictionEquationStiffness: 1e8,
+                frictionEquationRelaxation: 3
             }
         );
         world.addContactMaterial(groundBallContactMaterial);
+
+        // Matériau pour les murs - rebond plus élastique
+        const wallMaterial = new CANNON.Material({ 
+            friction: 0.3,
+            restitution: 0.8 // Rebond important sur les murs
+        });
+
+        // Contact matériau mur-balle
+        const wallBallContactMaterial = new CANNON.ContactMaterial(
+            wallMaterial,
+            ballBody.material,
+            {
+                friction: 0.3,
+                restitution: 0.7, // Bons rebonds sur les murs
+                contactEquationStiffness: 1e8,
+                contactEquationRelaxation: 3
+            }
+        );
+        world.addContactMaterial(wallBallContactMaterial);
 
         // Rampe
         function createRamp(x, y, z, width, height, depth, angle) {
@@ -454,6 +494,7 @@
         function hitBall() {
             canHit = false;
             
+            // Calculer la direction et la force
             const force = new CANNON.Vec3(
                 (startPoint.x - endPoint.x) * 0.05,
                 0,
@@ -467,16 +508,47 @@
                 force.scale(maxForce / magnitude, force);
             }
             
-            ballBody.applyImpulse(force, ballBody.position);
+            // Ajouter une légère composante verticale (loft)
+            const loft = Math.min(0.6 * magnitude, 4); // Loft proportionnel à la force, mais plafonné
+            force.y = loft;
+            
+            // Appliquer la force
+            ballBody.wakeUp(); // Réveiller la balle si elle dort
+            ballBody.velocity.set(0, 0, 0); // Réinitialiser la vitesse pour un coup précis
+            ballBody.angularVelocity.set(0, 0, 0); // Réinitialiser la rotation
+            
+            // Point d'application légèrement décalé pour créer plus de spin
+            const hitPoint = new CANNON.Vec3(
+                ballBody.position.x,
+                ballBody.position.y - 0.1, // Frapper sous la balle
+                ballBody.position.z
+            );
+            
+            ballBody.applyImpulse(force, hitPoint);
+            
+            // Ajouter du spin (rotation) en fonction de la direction
+            const spin = new CANNON.Vec3(
+                -force.z * 0.5, // Spin autour de l'axe X (backspin/topspin)
+                force.length() * 0.3, // Spin autour de l'axe Y (rotation latérale)
+                force.x * 0.5  // Spin autour de l'axe Z (sidespin)
+            );
+            ballBody.angularVelocity.copy(spin);
             
             // Sons
             playSound('hit');
             
             // Réactiver après que la balle soit presque arrêtée
             const checkVelocity = setInterval(() => {
-                if (ballBody.velocity.length() < 0.1) {
+                if (ballBody.velocity.length() < 0.05 && ballBody.position.y <= 0.25) {
                     canHit = true;
                     clearInterval(checkVelocity);
+                    
+                    // Force la balle à s'arrêter complètement après un certain temps
+                    if (ballBody.velocity.length() < 0.1) {
+                        ballBody.velocity.set(0, 0, 0);
+                        ballBody.angularVelocity.set(0, 0, 0);
+                        ballBody.sleep(); // Mise en sommeil pour économiser des ressources
+                    }
                 }
             }, 500);
         }
@@ -607,6 +679,10 @@
 
         // Animation
         let gameWon = false;
+        let stuckTimer = 0;
+        let lastPosition = new THREE.Vector3();
+        let resetNotified = false;
+
         function animate() {
             requestAnimationFrame(animate);
 
@@ -617,6 +693,40 @@
                 // Synchronisation des positions
                 ball.position.copy(ballBody.position);
                 ball.quaternion.copy(ballBody.quaternion);
+
+                // Vérification si la balle est immobile mais pas au repos
+                if (ballBody.velocity.length() < 0.05 && ballBody.position.y <= 0.21 && !canHit) {
+                    stuckTimer++;
+                    if (stuckTimer > 120) { // 2 secondes à 60fps
+                        canHit = true;
+                        ballBody.velocity.set(0, 0, 0);
+                        ballBody.angularVelocity.set(0, 0, 0);
+                        stuckTimer = 0;
+                    }
+                } else {
+                    stuckTimer = 0;
+                }
+
+                // Vérification si la balle est coincée contre un obstacle
+                if (ballBody.velocity.length() > 0.01 && ballBody.velocity.length() < 0.1) {
+                    const currentPosition = ball.position.clone();
+                    if (currentPosition.distanceTo(lastPosition) < 0.001) {
+                        if (!resetNotified) {
+                            console.log("Balle légèrement coincée, réinitialisation des vitesses");
+                            resetNotified = true;
+                            setTimeout(() => {
+                                if (currentPosition.distanceTo(ball.position) < 0.005) {
+                                    ballBody.velocity.set(0, 0, 0);
+                                    ballBody.angularVelocity.set(0, 0, 0);
+                                    canHit = true;
+                                }
+                            }, 1000);
+                        }
+                    } else {
+                        resetNotified = false;
+                    }
+                    lastPosition.copy(currentPosition);
+                }
 
                 // Vérification du trou
                 const distanceToHole = ballBody.position.distanceTo(holeBody.position);
