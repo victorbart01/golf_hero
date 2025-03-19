@@ -8,6 +8,7 @@ let isPowerAdjusting = false;
 let power = 0;
 let maxPower = 20;
 let gameState = 'aiming'; // 'aiming', 'powering', 'rolling', 'next-player'
+let controls;
 
 // Initialisation de Three.js
 function init() {
@@ -27,13 +28,22 @@ function init() {
     document.body.appendChild(renderer.domElement);
 
     // Ajout des contrôles de caméra
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.screenSpacePanning = false;
-    controls.minDistance = 5;
-    controls.maxDistance = 30;
-    controls.maxPolarAngle = Math.PI / 2.2;
+    if (typeof THREE.OrbitControls !== 'undefined') {
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+    } else if (window.OrbitControls) {
+        controls = new window.OrbitControls(camera, renderer.domElement);
+    } else {
+        console.error("OrbitControls n'est pas disponible");
+    }
+    
+    if (controls) {
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 5;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2.2;
+    }
 
     // Ajout de lumière
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -105,6 +115,11 @@ function onMouseUp(event) {
 // Fonctions équivalentes pour les appareils tactiles
 function onTouchStart(event) {
     // Implémentation similaire à onMouseDown
+    if (gameState === 'aiming') {
+        isAiming = true;
+        gameState = 'powering';
+        document.getElementById('power-meter').style.display = 'block';
+    }
 }
 
 function onTouchMove(event) {
@@ -113,6 +128,14 @@ function onTouchMove(event) {
 
 function onTouchEnd(event) {
     // Implémentation similaire à onMouseUp
+    if (gameState === 'powering') {
+        hitBall(power);
+        power = 0;
+        document.getElementById('power-fill').style.width = '0%';
+        document.getElementById('power-meter').style.display = 'none';
+        gameState = 'rolling';
+        isPowerAdjusting = false;
+    }
 }
 
 // Mise à jour de l'interface utilisateur
@@ -146,6 +169,9 @@ function nextPlayer() {
 // Boucle d'animation principale
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Mise à jour des contrôles si disponibles
+    if (controls) controls.update();
     
     // Mise à jour de la physique
     updatePhysics();

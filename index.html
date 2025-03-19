@@ -40,6 +40,17 @@
             background-color: #f00;
             transition: width 0.1s;
         }
+        #debug {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -50,11 +61,26 @@
     <div id="power-meter">
         <div id="power-fill"></div>
     </div>
+    <div id="debug">Chargement du jeu...</div>
     
     <!-- Importation des bibliothèques -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"></script>
+    
+    <script>
+        // Vérification des bibliothèques
+        window.addEventListener('load', function() {
+            const debug = document.getElementById('debug');
+            let status = "État des bibliothèques:<br>";
+            
+            status += "Three.js: " + (window.THREE ? "Chargé ✓" : "Non chargé ✗") + "<br>";
+            status += "OrbitControls: " + (window.THREE && window.THREE.OrbitControls ? "Chargé ✓" : "Non chargé ✗") + "<br>";
+            status += "Cannon.js: " + (window.CANNON ? "Chargé ✓" : "Non chargé ✗");
+            
+            debug.innerHTML = status;
+        });
+    </script>
     
     <!-- Scripts du jeu -->
     <script src="js/main.js"></script>

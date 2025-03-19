@@ -7,29 +7,55 @@ const timeStep = 1 / 60;
 
 // Initialisation de la physique
 function initPhysics() {
+    // Vérifier si CANNON est disponible
+    const CANNON = window.CANNON;
+    if (!CANNON) {
+        console.error('Cannon.js n\'est pas chargé correctement');
+        return;
+    }
+
     // Création du monde physique
-    world = new CANNON.World({
-        gravity: new CANNON.Vec3(0, -9.82, 0) // Gravité terrestre
-    });
+    try {
+        // Essayer la nouvelle syntaxe (cannon-es)
+        world = new CANNON.World({
+            gravity: new CANNON.Vec3(0, -9.82, 0) // Gravité terrestre
+        });
+    } catch (e) {
+        // Essayer l'ancienne syntaxe (cannon.js)
+        world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+    }
     
     // Réduction de la dormance (pour que les petits objets ne s'endorment pas trop vite)
-    world.allowSleep = true;
-    world.sleepTimeLimit = 1.0;
-    world.sleepSpeedLimit = 0.1;
+    if (world.allowSleep !== undefined) {
+        world.allowSleep = true;
+        world.sleepTimeLimit = 1.0;
+        world.sleepSpeedLimit = 0.1;
+    }
     
     // Ajout du sol
     const groundShape = new CANNON.Plane();
     groundBody = new CANNON.Body({
-        type: CANNON.Body.STATIC,
+        type: CANNON.Body.STATIC || 0, // Utiliser 0 si STATIC n'est pas défini
         shape: groundShape,
         material: new CANNON.Material('ground')
     });
     groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); // Rotation pour que le sol soit horizontal
     world.addBody(groundBody);
+    
+    // Afficher un message de debug
+    const debug = document.getElementById('debug');
+    if (debug) {
+        debug.innerHTML += "<br><br>Monde physique initialisé ✓";
+    }
 }
 
 // Création de la balle de golf
 function createBall() {
+    // Vérifier si CANNON est disponible
+    const CANNON = window.CANNON;
+    if (!CANNON || !world) return;
+
     // Création de la géométrie Three.js
     const ballGeometry = new THREE.SphereGeometry(0.2, 32, 32);
     const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
@@ -60,10 +86,18 @@ function createBall() {
         }
     );
     world.addContactMaterial(ballGroundContact);
+    
+    // Afficher un message de debug
+    const debug = document.getElementById('debug');
+    if (debug) {
+        debug.innerHTML += "<br>Balle créée ✓";
+    }
 }
 
 // Frappe de la balle
 function hitBall(power) {
+    if (!ballBody) return;
+    
     // Direction basée sur la caméra
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
@@ -108,6 +142,8 @@ function isBallStopped() {
 
 // Mise à jour de la physique
 function updatePhysics() {
+    if (!world) return;
+    
     world.step(timeStep);
     
     // Mise à jour de la position de la balle dans Three.js
@@ -119,6 +155,9 @@ function updatePhysics() {
 
 // Ajout d'un obstacle
 function addObstacle(position, size, type = 'box') {
+    const CANNON = window.CANNON;
+    if (!CANNON || !world) return;
+    
     // Création de la géométrie Three.js
     let geometry, material, mesh;
     let shape, body;
