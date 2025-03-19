@@ -112,8 +112,8 @@
 
         // Corps physique du sol avec friction
         const groundPhysicsMaterial = new CANNON.Material({
-            friction: 0.5,
-            restitution: 0.3
+            friction: 0.8,
+            restitution: 0.2
         });
         
         const groundBody = new CANNON.Body({
@@ -139,9 +139,11 @@
         const ballBody = new CANNON.Body({
             mass: 1,
             shape: new CANNON.Sphere(0.2),
+            linearDamping: 0.5,
+            angularDamping: 0.5,
             material: new CANNON.Material({
-                friction: 0.3,
-                restitution: 0.7
+                friction: 0.5,
+                restitution: 0.6
             })
         });
         ballBody.position.set(0, 0.2, 0);
@@ -246,8 +248,8 @@
             groundPhysicsMaterial,
             ballBody.material,
             {
-                friction: 0.3,
-                restitution: 0.4
+                friction: 0.7,
+                restitution: 0.3
             }
         );
         world.addContactMaterial(groundBallContactMaterial);
