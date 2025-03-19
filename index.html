@@ -9,6 +9,7 @@
             margin: 0; 
             overflow: hidden; 
             font-family: Arial, sans-serif;
+            background-color: #87CEEB; /* Couleur de fond pour éviter l'écran noir */
         }
         canvas { 
             display: block; 
@@ -50,6 +51,27 @@
             border-radius: 5px;
             max-width: 300px;
             font-size: 12px;
+            z-index: 1000;
+        }
+        #fallback-scene {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fallback-ball {
+            width: 40px;
+            height: 40px;
+            background-color: white;
+            border-radius: 50%;
+            position: relative;
+            top: 0;
+            left: 0;
         }
     </style>
 </head>
@@ -62,6 +84,11 @@
         <div id="power-fill"></div>
     </div>
     <div id="debug">Chargement du jeu...</div>
+    
+    <!-- Scène de secours en cas d'échec du rendu 3D -->
+    <div id="fallback-scene">
+        <div class="fallback-ball"></div>
+    </div>
     
     <!-- Importation des bibliothèques -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -141,7 +168,7 @@
     </script>
     
     <script>
-        // Vérification des bibliothèques
+        // Débogage avancé
         window.addEventListener('load', function() {
             const debug = document.getElementById('debug');
             let status = "État des bibliothèques:<br>";
@@ -151,6 +178,120 @@
             status += "Cannon.js: " + (window.CANNON ? "Chargé ✓" : "Non chargé ✗");
             
             debug.innerHTML = status;
+            
+            // Essayer de créer une scène Three.js de base pour tester
+            try {
+                // Créer une scène simple
+                const testScene = new THREE.Scene();
+                const testCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                const testRenderer = new THREE.WebGLRenderer();
+                testRenderer.setSize(200, 200);
+                testRenderer.domElement.style.position = 'absolute';
+                testRenderer.domElement.style.bottom = '10px';
+                testRenderer.domElement.style.right = '10px';
+                
+                // Ajouter un cube simple
+                const geometry = new THREE.BoxGeometry();
+                const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                const cube = new THREE.Mesh(geometry, material);
+                testScene.add(cube);
+                
+                testCamera.position.z = 5;
+                
+                // Ajouter à la page
+                document.body.appendChild(testRenderer.domElement);
+                
+                // Rendu du cube
+                testRenderer.render(testScene, testCamera);
+                
+                debug.innerHTML += "<br><br>Test de rendu Three.js: Réussi ✓";
+            } catch (e) {
+                debug.innerHTML += "<br><br>Test de rendu Three.js: Échec ✗<br>" + e.message;
+            }
+            
+            // Vérifier les fichiers JavaScript
+            const scriptsToCheck = ['js/main.js', 'js/physics.js', 'js/course.js', 'js/player.js'];
+            
+            // Fonction pour vérifier si un script est chargé
+            function checkScript(scriptSrc) {
+                const xhr = new XMLHttpRequest();
+                xhr.open('HEAD', scriptSrc, false);
+                try {
+                    xhr.send();
+                    return xhr.status !== 404;
+                } catch (e) {
+                    return false;
+                }
+            }
+            
+            debug.innerHTML += "<br><br>Vérification des scripts:";
+            scriptsToCheck.forEach(script => {
+                const isLoaded = checkScript(script);
+                debug.innerHTML += "<br>" + script + ": " + (isLoaded ? "Trouvé ✓" : "Non trouvé ✗");
+            });
+            
+            // Créer une version minimaliste du jeu directement ici
+            function createMinimalGame() {
+                debug.innerHTML += "<br><br>Création d'un jeu minimal de secours...";
+                
+                // Activer la scène de secours
+                document.getElementById('fallback-scene').style.zIndex = "1";
+                
+                // Logique de base pour la balle
+                const ball = document.querySelector('.fallback-ball');
+                let isDragging = false;
+                let power = 0;
+                let maxPower = 100;
+                
+                // Cliquer pour commencer à viser
+                ball.addEventListener('mousedown', function(e) {
+                    isDragging = true;
+                    document.getElementById('power-meter').style.display = 'block';
+                    
+                    // Animation de puissance
+                    const powerInterval = setInterval(function() {
+                        power = (power + 2) % maxPower;
+                        document.getElementById('power-fill').style.width = power + '%';
+                    }, 50);
+                    
+                    // Relâcher pour frapper
+                    function onMouseUp() {
+                        if (!isDragging) return;
+                        
+                        clearInterval(powerInterval);
+                        isDragging = false;
+                        
+                        // Animation simple de la balle
+                        const distance = power * 5;
+                        ball.style.transition = "all 1s ease-out";
+                        ball.style.transform = `translateY(-${distance}px)`;
+                        
+                        // Réinitialiser
+                        setTimeout(function() {
+                            ball.style.transition = "none";
+                            ball.style.transform = "none";
+                            power = 0;
+                            document.getElementById('power-fill').style.width = '0%';
+                            document.getElementById('power-meter').style.display = 'none';
+                        }, 1000);
+                        
+                        document.removeEventListener('mouseup', onMouseUp);
+                    }
+                    
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+                
+                debug.innerHTML += " Terminé ✓";
+            }
+            
+            // Attendre 3 secondes, si l'écran est encore noir, activer la scène de secours
+            setTimeout(function() {
+                const canvas = document.querySelector('canvas');
+                if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                    debug.innerHTML += "<br><br>Aucun canvas détecté après 3s, activation du mode secours";
+                    createMinimalGame();
+                }
+            }, 3000);
         });
     </script>
     
@@ -159,5 +300,22 @@
     <script src="js/physics.js"></script>
     <script src="js/course.js"></script>
     <script src="js/player.js"></script>
+    
+    <!-- Script de démarrage manuel en cas de problème -->
+    <script>
+        // Si init() n'a pas été appelée après 5 secondes, essayer de l'appeler manuellement
+        setTimeout(function() {
+            const debug = document.getElementById('debug');
+            if (typeof init === 'function' && !document.querySelector('canvas')) {
+                debug.innerHTML += "<br><br>Tentative de démarrage manuel...";
+                try {
+                    init();
+                    debug.innerHTML += " Réussie ✓";
+                } catch (e) {
+                    debug.innerHTML += " Échec ✗<br>" + e.message;
+                }
+            }
+        }, 5000);
+    </script>
 </body>
 </html> 
