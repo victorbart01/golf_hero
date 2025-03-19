@@ -15,9 +15,18 @@
             text-align: center;
             color: white;
         }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: Arial, sans-serif;
+        }
     </style>
 </head>
 <body>
+    <div id="score">Coups: 0</div>
     <div id="controls">
         <button id="hit">Frapper la balle</button>
         <p>Glissez pour viser (ou utilisez la souris)</p>
@@ -75,7 +84,7 @@
         ballBody.position.set(0, 0.2, 0);
         world.addBody(ballBody);
 
-        // Trou
+        // Trou (avec physique)
         const holeGeometry = new THREE.CircleGeometry(0.3, 32);
         const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
         const hole = new THREE.Mesh(holeGeometry, holeMaterial);
@@ -83,9 +92,16 @@
         hole.position.set(5, 0.01, 5);
         scene.add(hole);
 
-        // Caméra
-        camera.position.set(0, 5, 5);
-        camera.lookAt(0, 0, 0);
+        const holeBody = new CANNON.Body({
+            mass: 0,
+            shape: new CANNON.Cylinder(0.3, 0.3, 0.1, 32),
+            position: new CANNON.Vec3(5, -0.05, 5)
+        });
+        world.addBody(holeBody);
+
+        // Gestion des coups
+        let strokeCount = 0;
+        const scoreDisplay = document.getElementById('score');
 
         // Contrôles
         let isDragging = false;
@@ -109,6 +125,8 @@
         function onEnd() {
             if (isDragging) {
                 hitBall();
+                strokeCount++;
+                scoreDisplay.textContent = `Coups: ${strokeCount}`;
             }
             isDragging = false;
         }
@@ -122,7 +140,11 @@
             ballBody.applyImpulse(force, ballBody.position);
         }
 
-        document.getElementById('hit').addEventListener('click', hitBall);
+        document.getElementById('hit').addEventListener('click', () => {
+            hitBall();
+            strokeCount++;
+            scoreDisplay.textContent = `Coups: ${strokeCount}`;
+        });
         renderer.domElement.addEventListener('mousedown', onStart);
         renderer.domElement.addEventListener('mousemove', onMove);
         renderer.domElement.addEventListener('mouseup', onEnd);
@@ -130,24 +152,52 @@
         renderer.domElement.addEventListener('touchmove', onMove);
         renderer.domElement.addEventListener('touchend', onEnd);
 
+        // Gestion de la caméra
+        function updateCamera() {
+            const offset = new THREE.Vector3(0, 3, 3); // Position relative à la balle
+            const desiredPosition = ball.position.clone().add(offset);
+            
+            // Interpolation douce de la position de la caméra
+            camera.position.lerp(desiredPosition, 0.1);
+            camera.lookAt(ball.position);
+        }
+
         // Animation
+        let gameWon = false;
         function animate() {
             requestAnimationFrame(animate);
 
-            // Mise à jour de la physique
-            world.step(1/60);
+            if (!gameWon) {
+                // Mise à jour de la physique
+                world.step(1/60);
 
-            // Synchronisation des positions
-            ball.position.copy(ballBody.position);
-            ball.quaternion.copy(ballBody.quaternion);
+                // Synchronisation des positions
+                ball.position.copy(ballBody.position);
+                ball.quaternion.copy(ballBody.quaternion);
 
-            // Vérification du trou
-            const distanceToHole = ball.position.distanceTo(hole.position);
-            if (distanceToHole < 0.5 && ballBody.velocity.length() < 0.1) {
-                console.log("Balle dans le trou!");
+                // Vérification du trou
+                const distanceToHole = ballBody.position.distanceTo(holeBody.position);
+                if (distanceToHole < 0.3 && ballBody.position.y < 0 && ballBody.velocity.length() < 0.1) {
+                    gameWon = true;
+                    ballBody.velocity.set(0, 0, 0);
+                    scoreDisplay.textContent = `Victoire en ${strokeCount} coups!`;
+                    setTimeout(resetGame, 2000); // Réinitialisation après 2 secondes
+                }
+
+                // Mise à jour de la caméra
+                updateCamera();
             }
 
             renderer.render(scene, camera);
+        }
+
+        function resetGame() {
+            ballBody.position.set(0, 0.2, 0);
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+            strokeCount = 0;
+            scoreDisplay.textContent = `Coups: ${strokeCount}`;
+            gameWon = false;
         }
 
         animate();
