@@ -110,9 +110,16 @@
         ground.receiveShadow = true;
         scene.add(ground);
 
+        // Corps physique du sol avec friction
+        const groundPhysicsMaterial = new CANNON.Material({
+            friction: 0.5,
+            restitution: 0.3
+        });
+        
         const groundBody = new CANNON.Body({
             mass: 0,
-            shape: new CANNON.Plane()
+            shape: new CANNON.Plane(),
+            material: groundPhysicsMaterial
         });
         groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
         world.addBody(groundBody);
@@ -234,6 +241,17 @@
         );
         world.addContactMaterial(sandBallContactMaterial);
 
+        // Contact matériau sol-balle (pour plus de friction)
+        const groundBallContactMaterial = new CANNON.ContactMaterial(
+            groundPhysicsMaterial,
+            ballBody.material,
+            {
+                friction: 0.3,
+                restitution: 0.4
+            }
+        );
+        world.addContactMaterial(groundBallContactMaterial);
+
         // Rampe
         function createRamp(x, y, z, width, height, depth, angle) {
             const rampGeometry = new THREE.BoxGeometry(width, height, depth);
@@ -270,8 +288,26 @@
         let startPoint = { x: 0, y: 0 };
         let endPoint = { x: 0, y: 0 };
         let canHit = true;
+        let isCameraRotating = false;
+        let cameraRotationStart = { x: 0, y: 0 };
+        let cameraRotation = { x: 0, y: 0 };
 
         function onStart(event) {
+            // Bouton droit de la souris ou toucher avec deux doigts pour faire pivoter la caméra
+            if (event.button === 2 || (event.touches && event.touches.length === 2)) {
+                event.preventDefault();
+                isCameraRotating = true;
+                const clientX = event.touches ? 
+                    (event.touches[0].clientX + event.touches[1].clientX) / 2 : 
+                    event.clientX;
+                const clientY = event.touches ? 
+                    (event.touches[0].clientY + event.touches[1].clientY) / 2 : 
+                    event.clientY;
+                cameraRotationStart = { x: clientX, y: clientY };
+                return;
+            }
+            
+            // Bouton gauche ou toucher normal pour frapper la balle
             if (!canHit || gameWon) return;
             
             isDragging = true;
@@ -283,6 +319,24 @@
         }
 
         function onMove(event) {
+            if (isCameraRotating) {
+                const clientX = event.touches ? 
+                    (event.touches[0].clientX + event.touches[1].clientX) / 2 : 
+                    event.clientX;
+                const clientY = event.touches ? 
+                    (event.touches[0].clientY + event.touches[1].clientY) / 2 : 
+                    event.clientY;
+                
+                const deltaX = clientX - cameraRotationStart.x;
+                const deltaY = clientY - cameraRotationStart.y;
+                
+                cameraRotation.x += deltaX * 0.01;
+                cameraRotation.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraRotation.y + deltaY * 0.01));
+                
+                cameraRotationStart = { x: clientX, y: clientY };
+                return;
+            }
+            
             if (!isDragging) return;
             
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
@@ -291,7 +345,12 @@
             updateDirectionArrow();
         }
 
-        function onEnd() {
+        function onEnd(event) {
+            if (isCameraRotating) {
+                isCameraRotating = false;
+                return;
+            }
+            
             if (isDragging && canHit && !gameWon) {
                 const distance = Math.sqrt(
                     Math.pow(startPoint.x - endPoint.x, 2) + 
@@ -467,8 +526,20 @@
 
         // Gestion de la caméra
         function updateCamera() {
-            const offset = new THREE.Vector3(0, 3, 3); // Position relative à la balle
-            const desiredPosition = ball.position.clone().add(offset);
+            // Position initiale relative à la balle
+            const radius = 4; // Distance de la caméra à la balle
+            const height = 3;  // Hauteur de la caméra
+            
+            // Utilisation des angles de rotation pour calculer la position
+            const offsetX = radius * Math.sin(cameraRotation.x);
+            const offsetZ = radius * Math.cos(cameraRotation.x);
+            
+            // Position finale de la caméra
+            const desiredPosition = new THREE.Vector3(
+                ball.position.x + offsetX,
+                ball.position.y + height - cameraRotation.y * 2,
+                ball.position.z + offsetZ
+            );
             
             // Interpolation douce de la position de la caméra
             camera.position.lerp(desiredPosition, 0.1);
@@ -538,6 +609,11 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Empêcher le menu contextuel sur clic droit
+        document.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
         });
     </script>
 </body>
