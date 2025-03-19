@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Golf Hero</title>
     <style>
-        body { margin: 0; overflow: hidden; }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
         canvas { width: 100%; height: 100vh; }
         #controls {
             position: absolute;
@@ -14,6 +14,9 @@
             transform: translateX(-50%);
             text-align: center;
             color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 10px;
         }
         #score {
             position: absolute;
@@ -21,14 +24,35 @@
             left: 50%;
             transform: translateX(-50%);
             color: white;
-            font-family: Arial, sans-serif;
+            font-size: 18px;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #reset {
+            background-color: #f44336;
+            margin-left: 10px;
         }
     </style>
 </head>
 <body>
     <div id="score">Coups: 0</div>
     <div id="controls">
-        <button id="hit">Frapper la balle</button>
+        <button id="hit" class="button">Frapper la balle</button>
+        <button id="reset" class="button">Recommencer</button>
         <p>Glissez pour viser (ou utilisez la souris)</p>
     </div>
 
@@ -47,10 +71,24 @@
 
         // Initialisation de la scène
         const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Ciel bleu
+        
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
+
+        // Éclairage
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 20, 10);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
+        scene.add(directionalLight);
 
         // Initialisation de la physique
         const world = new CANNON.World();
@@ -58,9 +96,18 @@
 
         // Sol
         const groundGeometry = new THREE.PlaneGeometry(20, 20);
-        const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x228B22 });
+        const groundTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/hardwood2_diffuse.jpg');
+        groundTexture.wrapS = THREE.RepeatWrapping;
+        groundTexture.wrapT = THREE.RepeatWrapping;
+        groundTexture.repeat.set(5, 5);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            map: groundTexture,
+            color: 0x228B22,
+            roughness: 0.8
+        });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
         scene.add(ground);
 
         const groundBody = new CANNON.Body({
@@ -72,14 +119,23 @@
 
         // Balle
         const ballGeometry = new THREE.SphereGeometry(0.2, 32, 32);
-        const ballMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const ballMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff,
+            metalness: 0.2,
+            roughness: 0.1
+        });
         const ball = new THREE.Mesh(ballGeometry, ballMaterial);
         ball.position.y = 0.2;
+        ball.castShadow = true;
         scene.add(ball);
 
         const ballBody = new CANNON.Body({
             mass: 1,
-            shape: new CANNON.Sphere(0.2)
+            shape: new CANNON.Sphere(0.2),
+            material: new CANNON.Material({
+                friction: 0.3,
+                restitution: 0.7
+            })
         });
         ballBody.position.set(0, 0.2, 0);
         world.addBody(ballBody);
@@ -89,68 +145,315 @@
         const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
         const hole = new THREE.Mesh(holeGeometry, holeMaterial);
         hole.rotation.x = -Math.PI / 2;
-        hole.position.set(5, 0.01, 5);
+        hole.position.set(8, 0.01, 3);
         scene.add(hole);
+
+        // Drapeau
+        const flagPoleGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1, 8);
+        const flagPole = new THREE.Mesh(
+            flagPoleGeometry,
+            new THREE.MeshStandardMaterial({ color: 0x888888 })
+        );
+        flagPole.position.set(8, 0.5, 3);
+        flagPole.castShadow = true;
+        scene.add(flagPole);
+
+        const flagGeometry = new THREE.PlaneGeometry(0.4, 0.3);
+        const flag = new THREE.Mesh(
+            flagGeometry,
+            new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide })
+        );
+        flag.position.set(8.2, 0.9, 3);
+        scene.add(flag);
 
         const holeBody = new CANNON.Body({
             mass: 0,
             shape: new CANNON.Cylinder(0.3, 0.3, 0.1, 32),
-            position: new CANNON.Vec3(5, -0.05, 5)
+            position: new CANNON.Vec3(8, -0.05, 3)
         });
         world.addBody(holeBody);
+
+        // Ajout d'obstacles
+
+        // 1. Mur
+        function createWall(x, y, z, width, height, depth) {
+            const wallGeometry = new THREE.BoxGeometry(width, height, depth);
+            const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xA0522D });
+            const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+            wall.position.set(x, y, z);
+            wall.castShadow = true;
+            scene.add(wall);
+
+            const wallBody = new CANNON.Body({
+                mass: 0,
+                shape: new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2))
+            });
+            wallBody.position.set(x, y, z);
+            world.addBody(wallBody);
+        }
+
+        // Murs stratégiques
+        createWall(4, 0.5, 2, 0.3, 1, 5); // Mur vertical
+        createWall(6, 0.5, 0, 4, 1, 0.3); // Mur horizontal
+
+        // 2. Zone de sable
+        const sandGeometry = new THREE.CircleGeometry(1.5, 32);
+        const sandMaterial = new THREE.MeshStandardMaterial({ color: 0xF4A460 });
+        const sand = new THREE.Mesh(sandGeometry, sandMaterial);
+        sand.rotation.x = -Math.PI / 2;
+        sand.position.set(3, 0.02, 4);
+        scene.add(sand);
+
+        // Corps pour la zone de sable (ralentissement)
+        const sandBody = new CANNON.Body({
+            mass: 0,
+            shape: new CANNON.Cylinder(1.5, 1.5, 0.1, 32),
+            position: new CANNON.Vec3(3, 0, 4),
+            material: new CANNON.Material({ friction: 0.8 })
+        });
+        world.addBody(sandBody);
+
+        // Contact de matériaux pour la zone de sable
+        const sandBallContactMaterial = new CANNON.ContactMaterial(
+            ballBody.material,
+            sandBody.material,
+            {
+                friction: 0.9,
+                restitution: 0.2
+            }
+        );
+        world.addContactMaterial(sandBallContactMaterial);
+
+        // Rampe
+        function createRamp(x, y, z, width, height, depth, angle) {
+            const rampGeometry = new THREE.BoxGeometry(width, height, depth);
+            const rampMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
+            ramp.position.set(x, y, z);
+            ramp.rotation.z = angle;
+            ramp.castShadow = true;
+            scene.add(ramp);
+
+            const rampBody = new CANNON.Body({
+                mass: 0,
+                shape: new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2))
+            });
+            rampBody.position.set(x, y, z);
+            rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), angle);
+            world.addBody(rampBody);
+        }
+
+        createRamp(6, 0.25, 2, 3, 0.1, 1.5, Math.PI / 12); // Légère rampe
 
         // Gestion des coups
         let strokeCount = 0;
         const scoreDisplay = document.getElementById('score');
 
+        // Indicateur de direction
+        const arrowGeometry = new THREE.BufferGeometry();
+        const arrowMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+        const arrow = new THREE.Line(arrowGeometry, arrowMaterial);
+        scene.add(arrow);
+
         // Contrôles
         let isDragging = false;
         let startPoint = { x: 0, y: 0 };
         let endPoint = { x: 0, y: 0 };
+        let canHit = true;
 
         function onStart(event) {
+            if (!canHit || gameWon) return;
+            
             isDragging = true;
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
             const clientY = event.touches ? event.touches[0].clientY : event.clientY;
             startPoint = { x: clientX, y: clientY };
+            endPoint = { x: clientX, y: clientY };
+            updateDirectionArrow();
         }
 
         function onMove(event) {
             if (!isDragging) return;
+            
             const clientX = event.touches ? event.touches[0].clientX : event.clientX;
             const clientY = event.touches ? event.touches[0].clientY : event.clientY;
             endPoint = { x: clientX, y: clientY };
+            updateDirectionArrow();
         }
 
         function onEnd() {
-            if (isDragging) {
-                hitBall();
-                strokeCount++;
-                scoreDisplay.textContent = `Coups: ${strokeCount}`;
+            if (isDragging && canHit && !gameWon) {
+                const distance = Math.sqrt(
+                    Math.pow(startPoint.x - endPoint.x, 2) + 
+                    Math.pow(startPoint.y - endPoint.y, 2)
+                );
+                
+                if (distance > 10) { // Seuil minimal pour éviter les clics accidentels
+                    hitBall();
+                    strokeCount++;
+                    scoreDisplay.textContent = `Coups: ${strokeCount}`;
+                    
+                    // Désactiver l'indicateur
+                    const positions = new Float32Array([]);
+                    arrowGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                }
             }
             isDragging = false;
         }
 
+        function updateDirectionArrow() {
+            if (!isDragging) return;
+            
+            // Calculer la direction
+            const direction = {
+                x: (startPoint.x - endPoint.x) * 0.05,
+                z: (startPoint.y - endPoint.y) * 0.05
+            };
+            
+            // Force maximale pour maintenir la flèche à une taille raisonnable
+            const maxLength = 5;
+            const magnitude = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+            const scaleFactor = Math.min(magnitude, maxLength) / (magnitude || 1);
+            
+            // Créer la flèche
+            const positions = new Float32Array([
+                ball.position.x, ball.position.y, ball.position.z,
+                ball.position.x + direction.x * scaleFactor, ball.position.y, ball.position.z + direction.z * scaleFactor
+            ]);
+            
+            arrowGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        }
+
         function hitBall() {
+            canHit = false;
+            
             const force = new CANNON.Vec3(
                 (startPoint.x - endPoint.x) * 0.05,
                 0,
                 (startPoint.y - endPoint.y) * 0.05
             );
+            
+            // Limiter la force maximale
+            const maxForce = 20;
+            const magnitude = force.length();
+            if (magnitude > maxForce) {
+                force.scale(maxForce / magnitude, force);
+            }
+            
             ballBody.applyImpulse(force, ballBody.position);
+            
+            // Sons
+            playSound('hit');
+            
+            // Réactiver après que la balle soit presque arrêtée
+            const checkVelocity = setInterval(() => {
+                if (ballBody.velocity.length() < 0.1) {
+                    canHit = true;
+                    clearInterval(checkVelocity);
+                }
+            }, 500);
         }
 
         document.getElementById('hit').addEventListener('click', () => {
-            hitBall();
-            strokeCount++;
-            scoreDisplay.textContent = `Coups: ${strokeCount}`;
+            if (canHit && !gameWon) {
+                // Force par défaut pour le bouton (direction vers le trou)
+                const direction = new CANNON.Vec3(
+                    holeBody.position.x - ballBody.position.x,
+                    0,
+                    holeBody.position.z - ballBody.position.z
+                );
+                direction.normalize();
+                direction.scale(5, direction); // Force modérée
+                
+                ballBody.applyImpulse(direction, ballBody.position);
+                strokeCount++;
+                scoreDisplay.textContent = `Coups: ${strokeCount}`;
+                
+                // Sons
+                playSound('hit');
+                
+                // Désactiver temporairement
+                canHit = false;
+                const checkVelocity = setInterval(() => {
+                    if (ballBody.velocity.length() < 0.1) {
+                        canHit = true;
+                        clearInterval(checkVelocity);
+                    }
+                }, 500);
+            }
         });
+
+        document.getElementById('reset').addEventListener('click', resetGame);
+        
         renderer.domElement.addEventListener('mousedown', onStart);
         renderer.domElement.addEventListener('mousemove', onMove);
         renderer.domElement.addEventListener('mouseup', onEnd);
         renderer.domElement.addEventListener('touchstart', onStart);
         renderer.domElement.addEventListener('touchmove', onMove);
         renderer.domElement.addEventListener('touchend', onEnd);
+
+        // Sons basiques
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const sounds = {};
+
+        function createSound(name, type, duration) {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = type;
+            
+            if (name === 'hit') {
+                oscillator.frequency.value = 300;
+                gainNode.gain.setValueAtTime(1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            } else if (name === 'win') {
+                oscillator.frequency.value = 440;
+                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                
+                const now = audioContext.currentTime;
+                for (let i = 0; i < 5; i++) {
+                    oscillator.frequency.setValueAtTime(440 + i * 50, now + i * 0.1);
+                }
+                
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+            }
+            
+            sounds[name] = { oscillator, gainNode, duration };
+        }
+
+        function playSound(name) {
+            if (!sounds[name]) {
+                if (name === 'hit') createSound(name, 'sine', 0.3);
+                else if (name === 'win') createSound(name, 'square', 1);
+            }
+            
+            const sound = sounds[name];
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = sound.oscillator.type;
+            oscillator.frequency.value = sound.oscillator.frequency.value;
+            
+            if (name === 'hit') {
+                gainNode.gain.setValueAtTime(1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            } else if (name === 'win') {
+                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+                const now = audioContext.currentTime;
+                for (let i = 0; i < 5; i++) {
+                    oscillator.frequency.setValueAtTime(440 + i * 50, now + i * 0.1);
+                }
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+            }
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + sound.duration);
+        }
 
         // Gestion de la caméra
         function updateCamera() {
@@ -177,11 +480,19 @@
 
                 // Vérification du trou
                 const distanceToHole = ballBody.position.distanceTo(holeBody.position);
-                if (distanceToHole < 0.3 && ballBody.position.y < 0 && ballBody.velocity.length() < 0.1) {
+                if (distanceToHole < 0.3 && ballBody.position.y < 0 && ballBody.velocity.length() < 0.5) {
                     gameWon = true;
                     ballBody.velocity.set(0, 0, 0);
                     scoreDisplay.textContent = `Victoire en ${strokeCount} coups!`;
-                    setTimeout(resetGame, 2000); // Réinitialisation après 2 secondes
+                    playSound('win');
+                    setTimeout(resetGame, 3000); // Réinitialisation après 3 secondes
+                }
+
+                // Vérification si la balle est tombée hors limites
+                if (ball.position.y < -5) {
+                    resetBallPosition();
+                    strokeCount++;
+                    scoreDisplay.textContent = `Coups: ${strokeCount} (balle hors limites)`;
                 }
 
                 // Mise à jour de la caméra
@@ -191,13 +502,23 @@
             renderer.render(scene, camera);
         }
 
-        function resetGame() {
+        function resetBallPosition() {
             ballBody.position.set(0, 0.2, 0);
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
+            canHit = true;
+        }
+
+        function resetGame() {
+            resetBallPosition();
             strokeCount = 0;
             scoreDisplay.textContent = `Coups: ${strokeCount}`;
             gameWon = false;
+            canHit = true;
+
+            // Réinitialiser l'indicateur de direction
+            const positions = new Float32Array([]);
+            arrowGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         }
 
         animate();
