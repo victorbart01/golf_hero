@@ -293,11 +293,41 @@
         let isCameraRotating = false;
         let cameraRotationStart = { x: 0, y: 0 };
         let cameraRotation = { x: 0, y: 0 };
+        let isPointerOverBall = false;
+        
+        // Raycaster pour détecter si le curseur est sur la balle
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        
+        function updateRaycaster(event) {
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            
+            // Coordonnées normalisées entre -1 et 1
+            pointer.x = (clientX / window.innerWidth) * 2 - 1;
+            pointer.y = - (clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObject(ball);
+            
+            isPointerOverBall = intersects.length > 0;
+            
+            // Mettre à jour le style du curseur
+            renderer.domElement.style.cursor = isPointerOverBall ? 'crosshair' : 'move';
+        }
 
         function onStart(event) {
+            event.preventDefault();
+            
+            // Mettre à jour le raycaster pour vérifier si on est sur la balle
+            if (event.touches && event.touches.length >= 1) {
+                updateRaycaster(event);
+            } else {
+                updateRaycaster(event);
+            }
+            
             // Bouton droit de la souris ou toucher avec deux doigts pour faire pivoter la caméra
             if (event.button === 2 || (event.touches && event.touches.length === 2)) {
-                event.preventDefault();
                 isCameraRotating = true;
                 const clientX = event.touches ? 
                     (event.touches[0].clientX + event.touches[1].clientX) / 2 : 
@@ -309,31 +339,50 @@
                 return;
             }
             
-            // Bouton gauche ou toucher normal pour frapper la balle
-            if (!canHit || gameWon) return;
+            // Si le clic gauche n'est pas sur la balle, on fait pivoter la caméra
+            if (!isPointerOverBall && (event.button === 0 || (event.touches && event.touches.length === 1))) {
+                isCameraRotating = true;
+                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+                const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+                cameraRotationStart = { x: clientX, y: clientY };
+                return;
+            }
             
-            isDragging = true;
-            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-            startPoint = { x: clientX, y: clientY };
-            endPoint = { x: clientX, y: clientY };
-            updateDirectionArrow();
+            // Bouton gauche ou toucher normal sur la balle pour frapper la balle
+            if (isPointerOverBall && (!canHit || gameWon)) return;
+            
+            if (isPointerOverBall) {
+                isDragging = true;
+                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+                const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+                startPoint = { x: clientX, y: clientY };
+                endPoint = { x: clientX, y: clientY };
+                updateDirectionArrow();
+            }
         }
 
         function onMove(event) {
+            event.preventDefault();
+            
+            // Mise à jour du raycaster lors du mouvement
+            if (!isDragging && !isCameraRotating) {
+                updateRaycaster(event);
+            }
+            
             if (isCameraRotating) {
                 const clientX = event.touches ? 
-                    (event.touches[0].clientX + event.touches[1].clientX) / 2 : 
+                    (event.touches.length === 2 ? (event.touches[0].clientX + event.touches[1].clientX) / 2 : event.touches[0].clientX) : 
                     event.clientX;
                 const clientY = event.touches ? 
-                    (event.touches[0].clientY + event.touches[1].clientY) / 2 : 
+                    (event.touches.length === 2 ? (event.touches[0].clientY + event.touches[1].clientY) / 2 : event.touches[0].clientY) : 
                     event.clientY;
                 
                 const deltaX = clientX - cameraRotationStart.x;
                 const deltaY = clientY - cameraRotationStart.y;
                 
+                // Mouvements non inversés
                 cameraRotation.x += deltaX * 0.01;
-                cameraRotation.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraRotation.y + deltaY * 0.01));
+                cameraRotation.y = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraRotation.y - deltaY * 0.01));
                 
                 cameraRotationStart = { x: clientX, y: clientY };
                 return;
@@ -370,6 +419,13 @@
                 }
             }
             isDragging = false;
+        }
+        
+        // Ajout d'un événement de mouvement pour mettre à jour le raycaster même sans clic
+        function onMouseMove(event) {
+            if (!isDragging && !isCameraRotating) {
+                updateRaycaster(event);
+            }
         }
 
         function updateDirectionArrow() {
@@ -462,6 +518,7 @@
         renderer.domElement.addEventListener('touchstart', onStart);
         renderer.domElement.addEventListener('touchmove', onMove);
         renderer.domElement.addEventListener('touchend', onEnd);
+        renderer.domElement.addEventListener('mousemove', onMouseMove);
 
         // Sons basiques
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
