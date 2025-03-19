@@ -35,10 +35,12 @@ function initPhysics() {
             material: new CANNON.Material('ground')
         });
         
-        // Corriger la rotation du sol pour s'adapter à la version de Three.js
-        // Au lieu d'utiliser setFromEuler avec des angles directement, créer un Euler
-        const euler = new THREE.Euler(-Math.PI / 2, 0, 0);
-        groundBody.quaternion.setFromEuler(euler.x, euler.y, euler.z, 'XYZ');
+        // Corriger la rotation du sol - Utiliser un quaternion directement
+        // Rotation de -90 degrés (π/2) autour de l'axe X
+        groundBody.quaternion.x = -Math.sin(Math.PI / 4); // sin(θ/2)
+        groundBody.quaternion.y = 0;
+        groundBody.quaternion.z = 0;
+        groundBody.quaternion.w = Math.cos(Math.PI / 4); // cos(θ/2)
         
         world.addBody(groundBody);
         
@@ -197,9 +199,12 @@ function addObstacle(position, size, type = 'box') {
                 position: new CANNON.Vec3(position.x, position.y, position.z)
             });
             
-            // Corriger la rotation de la pente
-            const euler = new THREE.Euler(-Math.PI / 12, 0, 0);
-            body.quaternion.setFromEuler(euler.x, euler.y, euler.z, 'XYZ');
+            // Utiliser un quaternion directement pour une rotation de -15 degrés autour de l'axe X
+            const angle = -Math.PI / 12;
+            body.quaternion.x = Math.sin(angle/2);
+            body.quaternion.y = 0;
+            body.quaternion.z = 0;
+            body.quaternion.w = Math.cos(angle/2);
             break;
             
         case 'water':
