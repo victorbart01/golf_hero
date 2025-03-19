@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Golf Hero</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #power-meter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        #power-fill {
+            height: 100%;
+            width: 0%;
+            background-color: #f00;
+            transition: width 0.1s;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="score">Coups: 0</div>
+        <div id="player">Joueur 1</div>
+    </div>
+    <div id="power-meter">
+        <div id="power-fill"></div>
+    </div>
+    
+    <!-- Importation des bibliothèques -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.min.js"></script>
+    
+    <!-- Scripts du jeu -->
+    <script src="js/main.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/course.js"></script>
+    <script src="js/player.js"></script>
+</body>
+</html>
