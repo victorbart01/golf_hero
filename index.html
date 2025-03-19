@@ -196,6 +196,16 @@
         createWall(4, 0.5, 2, 0.3, 1, 5); // Mur vertical
         createWall(6, 0.5, 0, 4, 1, 0.3); // Mur horizontal
 
+        // Bordures du parcours pour empêcher la balle de tomber
+        // Bordure nord
+        createWall(0, 0.5, -10, 20, 1, 0.3);
+        // Bordure sud
+        createWall(0, 0.5, 10, 20, 1, 0.3);
+        // Bordure est
+        createWall(10, 0.5, 0, 0.3, 1, 20);
+        // Bordure ouest
+        createWall(-10, 0.5, 0, 0.3, 1, 20);
+
         // 2. Zone de sable
         const sandGeometry = new THREE.CircleGeometry(1.5, 32);
         const sandMaterial = new THREE.MeshStandardMaterial({ color: 0xF4A460 });
